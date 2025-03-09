@@ -59,6 +59,35 @@ impl MessageIter {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Channel {
+    red: bool,
+    green: bool,
+    blue: bool,
+    alpha: bool,
+}
+
+struct ChannelIter {
+    index: usize,
+    channels: Vec<Channel>,
+}
+
+impl ChannelIter {
+    fn new(channels: Vec<Channel>) -> Self {
+        Self { index: 0, channels }
+    }
+}
+
+impl Iterator for ChannelIter {
+    type Item = Channel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let channel = self.channels[self.index];
+        self.index = (self.index + 1) % self.channels.len();
+        Some(channel)
+    }
+}
+
 impl Iterator for MessageIter {
     type Item = bool;
 
@@ -84,9 +113,16 @@ fn load_image(path: &str) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     Ok(img)
 }
 
-fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> Result<RgbaImage, String> {
+fn encode(
+    onto: DynamicImage,
+    text: &str,
+    channels: Vec<Channel>,
+    offsets: &[u32],
+    skip: u32,
+) -> Result<RgbaImage, String> {
     let mut result: RgbaImage = ImageBuffer::new(onto.dimensions().0, onto.dimensions().1);
     let mut message_iter = MessageIter::new(text);
+    let mut channel_iter = ChannelIter::new(channels);
     let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
@@ -100,8 +136,30 @@ fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> Result<
         let mut alpha = source_pixel[3];
 
         if index == next_data_index {
-            if let Some(bit) = message_iter.next() {
-                red = if bit { red | 1 } else { red & !1 };
+            let channel = channel_iter.next().unwrap();
+
+            if channel.red {
+                if let Some(bit) = message_iter.next() {
+                    red = if bit { red | 1 } else { red & !1 };
+                }
+            }
+
+            if channel.green {
+                if let Some(bit) = message_iter.next() {
+                    green = if bit { green | 1 } else { green & !1 };
+                }
+            }
+
+            if channel.blue {
+                if let Some(bit) = message_iter.next() {
+                    blue = if bit { blue | 1 } else { blue & !1 };
+                }
+            }
+
+            if channel.alpha {
+                if let Some(bit) = message_iter.next() {
+                    alpha = if bit { alpha | 1 } else { alpha & !1 };
+                }
             }
 
             next_data_index = offset_iter.next().unwrap();
@@ -133,8 +191,14 @@ fn to_bytes(message: Vec<bool>) -> Vec<u8> {
     result
 }
 
-fn decode(from: DynamicImage, offsets: &[u32], skip: u32) -> Option<String> {
+fn decode(
+    from: DynamicImage,
+    channels: Vec<Channel>,
+    offsets: &[u32],
+    skip: u32,
+) -> Option<String> {
     let mut message = Vec::new();
+    let mut channel_iter = ChannelIter::new(channels);
     let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
@@ -143,7 +207,24 @@ fn decode(from: DynamicImage, offsets: &[u32], skip: u32) -> Option<String> {
         let index = (pixel.0 + pixel.1 * from.dimensions().0) as usize;
 
         if index == next_data_index {
-            message.push((source_pixel[0] & 1) == 1);
+            let channel = channel_iter.next().unwrap();
+
+            if channel.red {
+                message.push((source_pixel[0] & 1) == 1);
+            }
+
+            if channel.green {
+                message.push((source_pixel[1] & 1) == 1);
+            }
+
+            if channel.blue {
+                message.push((source_pixel[2] & 1) == 1);
+            }
+
+            if channel.alpha {
+                message.push((source_pixel[3] & 1) == 1);
+            }
+
             next_data_index = offset_iter.next().unwrap();
         }
     });
@@ -154,6 +235,11 @@ fn decode(from: DynamicImage, offsets: &[u32], skip: u32) -> Option<String> {
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]))
     };
+
+    if length as usize > bytes.len() - 8 {
+        return None;
+    }
+
     let message_bytes = &bytes[8..(8 + length as usize)];
 
     str::from_utf8(&message_bytes).ok().map(|s| s.to_owned())
@@ -163,25 +249,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     dbg!(args);
 
-    let maybe_img = load_image("in.png");
-
-    if maybe_img.is_err() {
-        println!("Error loading image: {:?}", maybe_img.err());
-        return;
-    }
-
-    let source = maybe_img.unwrap();
-    match encode(source, "hello world", &[0, 10000], 18) {
-        Ok(result) => {
-            result.save("out.png").unwrap();
-            println!("Message encoded.");
-        }
-        Err(e) => {
-            println!("Error encoding message: {}", e);
-        }
-    }
-
-    // let maybe_img = load_image("out.png");
+    // let maybe_img = load_image("in.png");
 
     // if maybe_img.is_err() {
     //     println!("Error loading image: {:?}", maybe_img.err());
@@ -189,9 +257,48 @@ fn main() {
     // }
 
     // let source = maybe_img.unwrap();
-    // if let Some(result) = decode(source, &[0], 18) {
-    //     println!("Decoded message: {}", result);
-    // } else {
-    //     println!("No message found");
+    // match encode(
+    //     source,
+    //     "hello world",
+    //     Vec::from(&[Channel {
+    //         red: true,
+    //         green: false,
+    //         blue: false,
+    //         alpha: false,
+    //     }]),
+    //     &[0, 10000],
+    //     18,
+    // ) {
+    //     Ok(result) => {
+    //         result.save("out.png").unwrap();
+    //         println!("Message encoded.");
+    //     }
+    //     Err(e) => {
+    //         println!("Error encoding message: {}", e);
+    //     }
     // }
+
+    let maybe_img = load_image("out.png");
+
+    if maybe_img.is_err() {
+        println!("Error loading image: {:?}", maybe_img.err());
+        return;
+    }
+
+    let source = maybe_img.unwrap();
+    if let Some(result) = decode(
+        source,
+        Vec::from(&[Channel {
+            red: true,
+            green: false,
+            blue: false,
+            alpha: false,
+        }]),
+        &[0],
+        18,
+    ) {
+        println!("Decoded message: {}", result);
+    } else {
+        println!("No message found");
+    }
 }
