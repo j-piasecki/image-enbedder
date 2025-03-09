@@ -1,19 +1,19 @@
-use crate::color_channel;
-use crate::message_iter;
-use crate::offset_iter;
+use crate::color_channel::{Channel, ChannelIter};
+use crate::message_iter::MessageIter;
+use crate::offset_iter::OffsetIter;
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 
 pub fn encode(
     onto: DynamicImage,
     text: &str,
-    channels: Vec<color_channel::Channel>,
+    channels: Vec<Channel>,
     offsets: &[u32],
     skip: u32,
 ) -> Result<RgbaImage, String> {
     let mut result: RgbaImage = ImageBuffer::new(onto.dimensions().0, onto.dimensions().1);
-    let mut message_iter = message_iter::MessageIter::new(text);
-    let mut channel_iter = color_channel::ChannelIter::new(channels);
-    let mut offset_iter = offset_iter::OffsetIter::new(offsets.to_vec(), skip);
+    let mut message_iter = MessageIter::new(text);
+    let mut channel_iter = ChannelIter::new(channels);
+    let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
     result.enumerate_pixels_mut().for_each(|(x, y, pixel)| {

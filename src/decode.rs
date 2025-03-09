@@ -1,5 +1,5 @@
-use crate::color_channel;
-use crate::offset_iter;
+use crate::color_channel::{Channel, ChannelIter};
+use crate::offset_iter::OffsetIter;
 use image::{DynamicImage, GenericImageView};
 use std::mem::transmute;
 use std::str;
@@ -22,13 +22,13 @@ fn to_bytes(message: Vec<bool>) -> Vec<u8> {
 
 pub fn decode(
     from: DynamicImage,
-    channels: Vec<color_channel::Channel>,
+    channels: Vec<Channel>,
     offsets: &[u32],
     skip: u32,
 ) -> Option<String> {
     let mut message = Vec::new();
-    let mut channel_iter = color_channel::ChannelIter::new(channels);
-    let mut offset_iter = offset_iter::OffsetIter::new(offsets.to_vec(), skip);
+    let mut channel_iter = ChannelIter::new(channels);
+    let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
     from.pixels().for_each(|pixel| {

@@ -1,6 +1,5 @@
+use crate::utils::prepend;
 use std::mem::transmute;
-
-use crate::utils;
 
 pub struct MessageIter {
     message: Vec<u8>,
@@ -12,7 +11,7 @@ impl MessageIter {
     pub fn new(message: &str) -> Self {
         let mut bytes = message.as_bytes().to_vec();
         let preamble: [u8; 8] = unsafe { transmute(bytes.len().to_be()) };
-        bytes = utils::prepend(bytes, &preamble);
+        bytes = prepend(bytes, &preamble);
 
         Self {
             message: bytes,
