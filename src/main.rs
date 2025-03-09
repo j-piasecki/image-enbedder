@@ -1,5 +1,5 @@
+use clap::Parser;
 use image::{DynamicImage, GenericImageView, ImageBuffer, ImageReader, Rgba, RgbaImage};
-use std::env;
 use std::mem::transmute;
 use std::str;
 
@@ -59,7 +59,7 @@ impl MessageIter {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Channel {
     red: bool,
     green: bool,
@@ -245,60 +245,95 @@ fn decode(
     str::from_utf8(&message_bytes).ok().map(|s| s.to_owned())
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    input: String,
+
+    #[arg(short, long)]
+    output: Option<String>,
+
+    #[arg(short, long, default_value_t = 0)]
+    skip: u32,
+
+    #[arg(short, long)]
+    message: Option<String>,
+
+    #[arg(short, long, num_args = 1.., value_delimiter = ',')]
+    channels: Option<Vec<String>>,
+
+    #[arg(short, long, num_args = 1.., value_delimiter = ',')]
+    pattern: Option<Vec<u32>>,
+
+    #[arg(short, long, action)]
+    decode: bool,
+}
+
+fn create_out_name(input: &str) -> String {
+    let mut parts: Vec<&str> = input.split('.').collect();
+    let ext = parts.pop().unwrap();
+    let name = parts.join(".");
+    format!("{}-out.{}", name, ext)
+}
+
+fn build_channels(channels: Vec<String>) -> Vec<Channel> {
+    channels
+        .iter()
+        .map(|s| {
+            let lowercase = s.to_lowercase();
+            Channel {
+                red: lowercase.contains('r'),
+                green: lowercase.contains('g'),
+                blue: lowercase.contains('b'),
+                alpha: lowercase.contains('a'),
+            }
+        })
+        .collect()
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    dbg!(args);
-
-    // let maybe_img = load_image("in.png");
-
-    // if maybe_img.is_err() {
-    //     println!("Error loading image: {:?}", maybe_img.err());
-    //     return;
-    // }
-
-    // let source = maybe_img.unwrap();
-    // match encode(
-    //     source,
-    //     "hello world",
-    //     Vec::from(&[Channel {
-    //         red: true,
-    //         green: false,
-    //         blue: false,
-    //         alpha: false,
-    //     }]),
-    //     &[0, 10000],
-    //     18,
-    // ) {
-    //     Ok(result) => {
-    //         result.save("out.png").unwrap();
-    //         println!("Message encoded.");
-    //     }
-    //     Err(e) => {
-    //         println!("Error encoding message: {}", e);
-    //     }
-    // }
-
-    let maybe_img = load_image("out.png");
+    let args = Args::parse();
+    let output = args.output.unwrap_or_else(|| create_out_name(&args.input));
+    let channels = args.channels.map(build_channels).unwrap_or_else(|| {
+        vec![Channel {
+            red: true,
+            green: false,
+            blue: false,
+            alpha: false,
+        }]
+    });
+    let offsets = args.pattern.unwrap_or_else(|| vec![0]);
+    let maybe_img = load_image(&args.input);
 
     if maybe_img.is_err() {
         println!("Error loading image: {:?}", maybe_img.err());
         return;
     }
 
-    let source = maybe_img.unwrap();
-    if let Some(result) = decode(
-        source,
-        Vec::from(&[Channel {
-            red: true,
-            green: false,
-            blue: false,
-            alpha: false,
-        }]),
-        &[0],
-        18,
-    ) {
-        println!("Decoded message: {}", result);
+    let input = maybe_img.unwrap();
+
+    if args.decode {
+        if let Some(result) = decode(input, channels, &offsets, args.skip) {
+            println!("{}", result);
+        } else {
+            println!("Error decoding message");
+        }
     } else {
-        println!("No message found");
+        if args.message.is_none() {
+            println!("No message provided");
+            return;
+        }
+        let message = args.message.unwrap();
+
+        match encode(input, &message, channels, &offsets, args.skip) {
+            Ok(result) => {
+                result.save(output).unwrap();
+                println!("Message encoded.");
+            }
+            Err(e) => {
+                println!("Error encoding message: {}", e);
+            }
+        }
     }
 }
