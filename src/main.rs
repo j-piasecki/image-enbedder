@@ -84,7 +84,7 @@ fn load_image(path: &str) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     Ok(img)
 }
 
-fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> RgbaImage {
+fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> Result<RgbaImage, String> {
     let mut result: RgbaImage = ImageBuffer::new(onto.dimensions().0, onto.dimensions().1);
     let mut message_iter = MessageIter::new(text);
     let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
@@ -110,7 +110,11 @@ fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> RgbaIma
         *pixel = Rgba([red, green, blue, alpha]);
     });
 
-    result
+    if message_iter.next().is_some() {
+        return Err("Message too long or offsets too sparse".to_owned());
+    } else {
+        Ok(result)
+    }
 }
 
 fn to_bytes(message: Vec<bool>) -> Vec<u8> {
@@ -159,19 +163,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     dbg!(args);
 
-    // let maybe_img = load_image("in.png");
-
-    // if maybe_img.is_err() {
-    //     println!("Error loading image: {:?}", maybe_img.err());
-    //     return;
-    // }
-
-    // let source = maybe_img.unwrap();
-    // encode(source, "hello world", &[0], 18)
-    //     .save("out.png")
-    //     .unwrap();
-
-    let maybe_img = load_image("out.png");
+    let maybe_img = load_image("in.png");
 
     if maybe_img.is_err() {
         println!("Error loading image: {:?}", maybe_img.err());
@@ -179,9 +171,27 @@ fn main() {
     }
 
     let source = maybe_img.unwrap();
-    if let Some(result) = decode(source, &[0], 18) {
-        println!("Decoded message: {}", result);
-    } else {
-        println!("No message found");
+    match encode(source, "hello world", &[0, 10000], 18) {
+        Ok(result) => {
+            result.save("out.png").unwrap();
+            println!("Message encoded.");
+        }
+        Err(e) => {
+            println!("Error encoding message: {}", e);
+        }
     }
+
+    // let maybe_img = load_image("out.png");
+
+    // if maybe_img.is_err() {
+    //     println!("Error loading image: {:?}", maybe_img.err());
+    //     return;
+    // }
+
+    // let source = maybe_img.unwrap();
+    // if let Some(result) = decode(source, &[0], 18) {
+    //     println!("Decoded message: {}", result);
+    // } else {
+    //     println!("No message found");
+    // }
 }
