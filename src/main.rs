@@ -19,9 +19,9 @@ struct OffsetIter {
 }
 
 impl OffsetIter {
-    fn new(offsets: Vec<u32>) -> Self {
+    fn new(offsets: Vec<u32>, skip: u32) -> Self {
         Self {
-            current: 0,
+            current: skip as usize,
             index: 0,
             offsets,
         }
@@ -84,10 +84,10 @@ fn load_image(path: &str) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     Ok(img)
 }
 
-fn encode(onto: DynamicImage, text: &str, offsets: &[u32]) -> RgbaImage {
+fn encode(onto: DynamicImage, text: &str, offsets: &[u32], skip: u32) -> RgbaImage {
     let mut result: RgbaImage = ImageBuffer::new(onto.dimensions().0, onto.dimensions().1);
     let mut message_iter = MessageIter::new(text);
-    let mut offset_iter = OffsetIter::new(offsets.to_vec());
+    let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
     result.enumerate_pixels_mut().for_each(|(x, y, pixel)| {
@@ -129,9 +129,9 @@ fn to_bytes(message: Vec<bool>) -> Vec<u8> {
     result
 }
 
-fn decode(from: DynamicImage, offsets: &[u32]) -> Option<String> {
+fn decode(from: DynamicImage, offsets: &[u32], skip: u32) -> Option<String> {
     let mut message = Vec::new();
-    let mut offset_iter = OffsetIter::new(offsets.to_vec());
+    let mut offset_iter = OffsetIter::new(offsets.to_vec(), skip);
     let mut next_data_index = offset_iter.next().unwrap();
 
     from.pixels().for_each(|pixel| {
@@ -151,8 +151,8 @@ fn decode(from: DynamicImage, offsets: &[u32]) -> Option<String> {
         ]))
     };
     let message_bytes = &bytes[8..(8 + length as usize)];
-    let message = str::from_utf8(&message_bytes).unwrap();
-    Some(message.to_owned())
+
+    str::from_utf8(&message_bytes).ok().map(|s| s.to_owned())
 }
 
 fn main() {
@@ -167,7 +167,9 @@ fn main() {
     // }
 
     // let source = maybe_img.unwrap();
-    // encode(source, "hello world", &[0]).save("out.png").unwrap();
+    // encode(source, "hello world", &[0], 18)
+    //     .save("out.png")
+    //     .unwrap();
 
     let maybe_img = load_image("out.png");
 
@@ -177,6 +179,9 @@ fn main() {
     }
 
     let source = maybe_img.unwrap();
-    let result = decode(source, &[0]).unwrap();
-    println!("Decoded message: {}", result);
+    if let Some(result) = decode(source, &[0], 18) {
+        println!("Decoded message: {}", result);
+    } else {
+        println!("No message found");
+    }
 }
