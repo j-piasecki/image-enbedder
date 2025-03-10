@@ -60,8 +60,8 @@ fn main() {
     let channels = args.channels.map(build_channels).unwrap_or_else(|| {
         vec![color_channel::Channel {
             red: true,
-            green: false,
-            blue: false,
+            green: true,
+            blue: true,
             alpha: false,
         }]
     });
